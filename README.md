@@ -129,20 +129,8 @@ A sleek and personalized career development dashboard built with *React*. Design
 
 ---
 
-## 👥 **Team & Development**
 
-**Hackathon Team - Dev Clash**
 
-**Team Members:**
-- **[@Tejas-Santosh-Nalawade](https://github.com/Tejas-Santosh-Nalawade)** - Tejas Nalawade
-- **[@Prasadkandekar](https://github.com/Prasadkandekar)** - Prasad Trimbak Kandekar  
-- **[@Asteriskkkk](https://github.com/Asteriskkkk)** - Amit Patil
-- **[@Pravinrathod3](https://github.com/Pravinrathod3)** - Pravinsingh Rathod
-- **Hitesh Khare**
-
-**Development Timeline**: 24 Hours  
-**Team Size**: 5 Members  
-**Project Type**: DevClash Hackathon Devcraft / Group Project
 
 ---
 
