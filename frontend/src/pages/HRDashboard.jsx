@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useUser } from "@/context/UserContext";
 import {
     Users, Calendar, FileText, TrendingUp, Briefcase, UserCheck,
     X, MapPin, DollarSign, Clock, ChevronDown, BarChart2, PieChart,
@@ -522,7 +523,9 @@ function ViewAnalyticsModal({ onClose }) {
    MAIN DASHBOARD
    ───────────────────────────────────────────── */
 export default function HRDashboard() {
-    const [modal, setModal] = useState(null); // "postJob" | "scheduleInterview" | "analytics"
+    const [modal, setModal] = useState(null);
+    const { user } = useUser();
+    const hrName = user?.name || "HR";
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#0f3460] p-6 space-y-6">
@@ -533,7 +536,7 @@ export default function HRDashboard() {
 
             {/* Header */}
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent drop-shadow-sm">
-                👔 HR Dashboard
+                👔 HR Dashboard — {hrName}
             </h1>
 
             {/* Stats Grid */}

@@ -1,12 +1,15 @@
 import React, { useState } from "react";
+import { useUser } from "@/context/UserContext";
 
 export default function Dashboard() {
+  const { user } = useUser();
+  const firstName = user?.name?.split(" ")[0] || "Student";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#FAF5E9] via-[#FFF8E7] to-[#FAF5E9] p-6 space-y-6">
       {/* Header */}
       <h1 className="text-3xl font-bold bg-gradient-to-r from-[#009B4D] to-[#00C962] bg-clip-text text-transparent drop-shadow-sm">
-        👋 Welcome, Pratik!
+        👋 Welcome, {firstName}!
       </h1>
 
       {/* Stats Grid */}

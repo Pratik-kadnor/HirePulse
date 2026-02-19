@@ -67,18 +67,20 @@ const generalItems = [
 
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useUser } from '@/context/UserContext';
 
 export default function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, clearUser } = useUser();
 
   const handleLogout = async () => {
     try {
       await axios.post(`${import.meta.env.VITE_API_URL_NODE}/api/users/logout`);
-      navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
-      // Navigate anyway to clear frontend state
+    } finally {
+      clearUser();
       navigate('/login');
     }
   };
@@ -153,8 +155,23 @@ export default function AppSidebar() {
               }} />
           </div>
 
+          {/* User chip */}
+          {user && (
+            <div className="px-4 pb-2">
+              <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                  {user.name?.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white text-xs font-semibold truncate">{user.name}</p>
+                  <p className="text-gray-500 text-[10px] truncate">{user.email}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Logout button */}
-          <div className="mt-auto mb-4 px-4">
+          <div className="mb-4 px-4">
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-all w-full text-left"
