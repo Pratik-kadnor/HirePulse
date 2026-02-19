@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 export default function Dashboard() {
 
@@ -37,6 +37,7 @@ export default function Dashboard() {
           <p className="text-gray-600 text-sm">Mini calendar or upcoming deadlines will appear here.</p>
         </div>
       </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Course Recommendations */}

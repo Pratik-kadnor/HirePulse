@@ -9,6 +9,7 @@ import RegisterPage from '@/pages/Register'
 import Dashboard from '@/pages/Dashboard'
 import JobRecommendations from '@/pages/JobRecommendations'
 import Interview from '@/pages/Interview'
+import Top75 from '@/pages/Top75'
 import StudentLoginPage from '@/pages/StudentLogin'
 import HRLoginPage from '@/pages/HRLogin'
 import HRDashboard from '@/pages/HRDashboard'
@@ -27,6 +28,7 @@ function Routings() {
           <Route path="/app" element={<Layout />} >
             <Route index element={<Dashboard />} />
             <Route path="interview" element={<Interview />} />
+            <Route path="top75" element={<Top75 />} />
             <Route path="resume" element={<AnalyzeResume />} />
             <Route path="job" element={<JobRecommendations />} />
           </Route>

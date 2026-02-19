@@ -9,6 +9,7 @@ import {
   Settings,
   HelpCircle,
   LogOut,
+  Code2,
 } from "lucide-react";
 
 import {
@@ -33,6 +34,11 @@ const mainItems = [
     url: "/app/interview",
     icon: BrainCog,
     active: true,
+  },
+  {
+    title: "Top 75 LeetCode",
+    url: "/app/top75",
+    icon: Code2,
   },
   {
     title: "Resume",
