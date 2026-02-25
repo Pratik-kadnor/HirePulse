@@ -15,13 +15,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function RegisterForm({ className, ...rest }) {
+export function RegisterForm({ className, userType = "student", ...rest }) {
   const navigate = useNavigate();
   const { setUser } = useUser();
+
+  const isHR = userType === "hr";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -30,19 +33,18 @@ export function RegisterForm({ className, ...rest }) {
     setError("");
     setLoading(true);
     try {
-      // Register as student — backend returns JWT cookie + user data
+      const payload = { name, email, password, userType };
+      if (isHR && company) payload.company = company;
+
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL_NODE}/api/users`,
-        { name, email, password, userType: "student" }
+        payload
       );
 
-      const { _id, name: userName, email: userEmail, userType } = response.data;
+      const { _id, name: userName, email: userEmail, userType: type } = response.data;
+      setUser({ _id, name: userName, email: userEmail, userType: type || userType });
 
-      // Save to context + localStorage so dashboard can greet by name
-      setUser({ _id, name: userName, email: userEmail, userType: userType || "student" });
-
-      // JWT cookie is already set by backend — go straight to the app
-      navigate("/app");
+      navigate(isHR ? "/hr" : "/app");
     } catch (err) {
       const msg = err?.response?.data?.message;
       if (msg === "User already exists") {
@@ -59,9 +61,13 @@ export function RegisterForm({ className, ...rest }) {
     <div className={cn("flex flex-col gap-6", className)} {...rest}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Create your free account</CardTitle>
+          <CardTitle className="text-2xl">
+            {isHR ? "Create HR Account" : "Create your free account"}
+          </CardTitle>
           <CardDescription>
-            Sign up as a student — no credit card required
+            {isHR
+              ? "Sign up as an HR professional to manage candidates & interviews"
+              : "Sign up as a student — no credit card required"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -78,19 +84,32 @@ export function RegisterForm({ className, ...rest }) {
                 <Input
                   id="name"
                   type="text"
-                  placeholder="e.g. Pratik Kadnor"
+                  placeholder={isHR ? "e.g. Ananya Sharma" : "e.g. Pratik Kadnor"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
                 />
               </div>
 
+              {isHR && (
+                <div className="grid gap-2">
+                  <Label htmlFor="company">Company Name</Label>
+                  <Input
+                    id="company"
+                    type="text"
+                    placeholder="e.g. Infosys, TCS, Startup Inc."
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                  />
+                </div>
+              )}
+
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Work Email</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder={isHR ? "hr@company.com" : "you@example.com"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -110,16 +129,35 @@ export function RegisterForm({ className, ...rest }) {
                 />
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating account…" : "Sign Up — It's Free"}
+              <Button
+                type="submit"
+                className={`w-full ${isHR ? "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700" : ""}`}
+                disabled={loading}
+              >
+                {loading
+                  ? "Creating account…"
+                  : isHR
+                    ? "Create HR Account"
+                    : "Sign Up — It's Free"}
               </Button>
             </div>
 
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <a href="/login/student" className="underline underline-offset-4">
+              <a
+                href={isHR ? "/login/hr" : "/login/student"}
+                className="underline underline-offset-4"
+              >
                 Log in
               </a>
+              {!isHR && (
+                <>
+                  {" · "}
+                  <a href="/register/hr" className="underline underline-offset-4">
+                    Sign up as HR
+                  </a>
+                </>
+              )}
             </div>
           </form>
         </CardContent>

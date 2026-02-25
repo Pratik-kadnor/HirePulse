@@ -105,7 +105,10 @@ export function LoginForm({ userType = "student" }) {
             </div>
             <div className="mt-4 text-center text-sm">
               Don&apos;t have an account?{" "}
-              <a href="/login" className="underline underline-offset-4">
+              <a
+                href={userType === "hr" ? "/register/hr" : "/register"}
+                className="underline underline-offset-4"
+              >
                 Sign up
               </a>
             </div>

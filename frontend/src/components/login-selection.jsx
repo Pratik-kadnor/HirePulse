@@ -14,7 +14,7 @@ export function LoginSelection() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Student Login Card */}
-        <Card 
+        <Card
           className="cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-green-500/50 border-2 bg-gradient-to-br from-gray-900 to-gray-800"
           onClick={() => navigate('/login/student')}
         >
@@ -37,11 +37,21 @@ export function LoginSelection() {
             <button className="mt-6 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300">
               Continue as Student
             </button>
+            <p className="mt-3 text-xs text-gray-500">
+              New here?{" "}
+              <a
+                href="/register"
+                className="text-green-400 hover:underline"
+                onClick={(e) => { e.stopPropagation(); navigate('/register'); }}
+              >
+                Create a Student Account
+              </a>
+            </p>
           </CardContent>
         </Card>
 
         {/* HR Login Card */}
-        <Card 
+        <Card
           className="cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:border-blue-500/50 border-2 bg-gradient-to-br from-gray-900 to-gray-800"
           onClick={() => navigate('/login/hr')}
         >
@@ -64,6 +74,16 @@ export function LoginSelection() {
             <button className="mt-6 w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all duration-300">
               Continue as HR
             </button>
+            <p className="mt-3 text-xs text-gray-500">
+              New here?{" "}
+              <a
+                href="/register/hr"
+                className="text-blue-400 hover:underline"
+                onClick={(e) => { e.stopPropagation(); navigate('/register/hr'); }}
+              >
+                Create an HR Account
+              </a>
+            </p>
           </CardContent>
         </Card>
       </div>

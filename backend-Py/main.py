@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import time
 import shutil
 import tempfile
 import requests
@@ -16,17 +18,84 @@ load_dotenv(override=True)
 # Initialize FastAPI app
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
+# ─────────────────────────────────────────────
+#  Multi-model fallback chain
+#  Tries each model in order; moves to the next
+#  on 429 (rate limit) or any transient error.
+# ─────────────────────────────────────────────
+GEMINI_MODELS = [
+    "gemini-1.5-flash",        # Primary – fastest, generous free quota
+    "gemini-1.5-flash-8b",     # Fallback 1 – smaller, separate quota bucket
+    "gemini-1.0-pro",          # Fallback 2 – stable, different quota pool
+]
 
-# ---------- Resume Analysis Logic ----------
+def call_gemini_with_fallback(prompt: str, api_key: str) -> str:
+    """
+    Tries GEMINI_MODELS in order.  On 429 / error it waits briefly and
+    moves to the next model.  Returns the cleaned AI text.
+    Raises if all models are exhausted.
+    """
+    last_error = None
+
+    for model in GEMINI_MODELS:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:generateContent?key={api_key}"
+        )
+        headers = {"Content-Type": "application/json"}
+        data = {"contents": [{"parts": [{"text": prompt}]}]}
+
+        for attempt in range(2):          # 2 attempts per model before switching
+            try:
+                resp = requests.post(url, headers=headers, json=data, timeout=30)
+
+                if resp.status_code == 429:
+                    print(f"[{model}] 429 rate-limit (attempt {attempt+1}). Switching model…")
+                    time.sleep(1.5 ** attempt)   # 1 s, then 1.5 s
+                    break                         # break inner loop → next model
+
+                resp.raise_for_status()
+                result = resp.json()
+
+                candidates = result.get("candidates", [])
+                if candidates:
+                    raw = candidates[0]["content"]["parts"][0]["text"]
+                    return clean_gemini_output(raw)
+
+                # Empty response – try next model
+                print(f"[{model}] empty candidates, trying next model…")
+                break
+
+            except requests.exceptions.Timeout:
+                print(f"[{model}] timeout (attempt {attempt+1})")
+                last_error = "Request timed out"
+                time.sleep(1)
+
+            except requests.exceptions.HTTPError as e:
+                last_error = str(e)
+                if resp.status_code == 429:
+                    time.sleep(1.5 ** attempt)
+                    break
+                print(f"[{model}] HTTP error: {e}")
+                break
+
+            except Exception as e:
+                last_error = str(e)
+                print(f"[{model}] error: {e}")
+                break
+
+    raise Exception(f"All Gemini models exhausted. Last error: {last_error}")
+
+
+# ---------- Utilities ----------
 
 def extract_text_from_pdf(pdf_path):
     text = ""
@@ -46,6 +115,7 @@ def extract_text_from_pdf(pdf_path):
 
     return text.strip()
 
+
 def clean_gemini_output(text):
     text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
     text = re.sub(r"[*•📚⚠️💼✅🔹🔸📊🛠️📝⬇️🚀🔍]+", "", text)
@@ -54,12 +124,13 @@ def clean_gemini_output(text):
     text = re.sub(r"\n{2,}", "\n\n", text)
     return text.strip()
 
+
+# ---------- Resume Analysis ----------
+
 def analyze_resume_text(resume_text, job_description=None):
     prompt = f"""
 Assume you are a professional resume analyst and career coach.
-You are tasked with analyzing a resume and providing a detailed report.
-
-Analyze the following resume and provide report including:
+Analyze the following resume and provide a report including:
 - Overall profile strength
 - Key skills
 - Areas for improvement
@@ -67,63 +138,17 @@ Analyze the following resume and provide report including:
 - ATS Score (between 0 and 100)
 - Job recommendations
 
-give brief and concise answers.
+Give brief and concise answers.
 
 Resume:
 {resume_text}
 """
-
     if job_description:
         prompt += f"\n\nCompare with this job description:\n{job_description}"
 
-    # Use Gemini REST API directly with retry logic
     api_key = os.getenv("GOOGLE_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
-    
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "contents": [{
-            "parts": [{
-                "text": prompt
-            }]
-        }]
-    }
-    
-    import time
-    max_retries = 3
-    retry_delay = 2 # seconds
+    return call_gemini_with_fallback(prompt, api_key)
 
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            
-            result = response.json()
-            # Check if candidates exist
-            if "candidates" not in result or not result["candidates"]:
-                if "promptFeedback" in result:
-                     raise Exception(f"Analysis blocked: {result['promptFeedback']}")
-                raise Exception("No analysis result generated")
-                
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            return clean_gemini_output(text)
-            
-        except requests.exceptions.HTTPError as e:
-            if response.status_code == 429:
-                print(f"Rate limit hit (429). Retrying in {retry_delay} seconds... (Attempt {attempt+1}/{max_retries})")
-                time.sleep(retry_delay)
-                retry_delay *= 2 # Exponential backoff
-                continue
-            else:
-                raise e
-        except Exception as e:
-            print(f"Error checking Gemini: {e}")
-            raise e
-            
-    raise Exception("Failed to analyze resume after retries (Rate Limit)")
 
 @app.post("/analyze-resume/")
 async def analyze_resume_api(file: UploadFile = File(...), job_description: str = Form("")):
@@ -136,32 +161,23 @@ async def analyze_resume_api(file: UploadFile = File(...), job_description: str 
 
         print(f"Processing file: {file.filename}")
         resume_text = extract_text_from_pdf(file_path)
-        
+
         if not resume_text:
             raise Exception("Failed to extract text from PDF")
-        
+
         print(f"Extracted text length: {len(resume_text)}")
         analysis = analyze_resume_text(resume_text, job_description)
-
         shutil.rmtree(temp_dir)
         return {"analysis": analysis}
-    
+
     except Exception as e:
         print(f"Error analyzing resume: {str(e)}")
         if 'temp_dir' in locals():
             shutil.rmtree(temp_dir, ignore_errors=True)
         return {"error": f"Failed to analyze resume: {str(e)}"}
 
-# ---------- Job Recommendations Logic ----------
-# app = FastAPI()
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["http://localhost:5173"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+# ---------- Job Recommendations ----------
 
 @app.get("/job-recommendations")
 def get_jobs():
@@ -171,157 +187,149 @@ def get_jobs():
         "X-RapidAPI-Key": os.getenv("RAPIDAPI_KEY"),
         "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
     }
-
     response = requests.get(url, headers=headers, params=querystring)
     data = response.json()
     return {"jobs": data.get("data", [])}
 
+
+# ---------- Interview Chat ----------
+
+# Contextual follow-up fallback questions (used when AI is unavailable)
+FALLBACK_QUESTIONS = [
+    "That's interesting! Can you walk me through a challenging project you've worked on recently?",
+    "Great answer. How do you handle pressure or tight deadlines in your work?",
+    "Good. Can you describe a time when you had to learn a new technology quickly?",
+    "Tell me about a situation where you disagreed with a team member — how did you handle it?",
+    "What are your key strengths that make you a great fit for this role?",
+    "Where do you see yourself professionally in the next 3 years?",
+    "Can you give an example of how you've improved a process or workflow?",
+    "How do you stay updated with the latest trends in your field?",
+]
+_fallback_index = 0
+
+
 @app.post("/interview/chat")
 async def interview_chat(request: dict):
+    global _fallback_index
     try:
         user_message = request.get("message", "")
         if not user_message:
             return {"error": "Message is required"}
 
         prompt = f"""
-        You are an experienced HR interviewer conducting a job interview.
-        User says: "{user_message}"
-        
-        Provide a professional, concise, and engaging response. 
-        If the user answered a question, acknowledge it and ask the next relevant question.
-        Keep your response short (under 50 words) so it can be spoken easily.
-        """
-        
-        # Use retry logic for robustness
-        api_key = os.getenv("GOOGLE_API_KEY")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
-        headers = { "Content-Type": "application/json" }
-        data = { "contents": [{ "parts": [{ "text": prompt }] }] }
-        
-        import time
-        max_retries = 3
-        retry_delay = 2
+You are an experienced HR interviewer conducting a professional job interview.
+The candidate just said: "{user_message}"
 
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                result = response.json()
-                if "candidates" in result and result["candidates"]:
-                    ai_text = result["candidates"][0]["content"]["parts"][0]["text"]
-                    return {"response": clean_gemini_output(ai_text)}
-                raise Exception("No analysis result")
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                raise e
-                
+Instructions:
+- Acknowledge their answer briefly (1 sentence).
+- Then ask ONE clear, relevant follow-up interview question.
+- Keep the total response under 60 words so it can be spoken naturally.
+- Do NOT use bullet points, markdown, or lists.
+- Sound conversational and encouraging.
+"""
+        api_key = os.getenv("GOOGLE_API_KEY")
+
+        try:
+            ai_text = call_gemini_with_fallback(prompt, api_key)
+            _fallback_index = 0  # reset on success
+            return {"response": ai_text}
+
+        except Exception as model_err:
+            # All models exhausted → use a local fallback question so the
+            # interview keeps going instead of showing "undefined".
+            print(f"All models failed, using fallback question: {model_err}")
+            question = FALLBACK_QUESTIONS[_fallback_index % len(FALLBACK_QUESTIONS)]
+            _fallback_index += 1
+            return {
+                "response": question,
+                "fallback": True          # frontend can optionally note this
+            }
+
     except Exception as e:
         print(f"Error in interview chat: {str(e)}")
-        return {"error": f"Failed to get response: {str(e)}"}
+        return {
+            "response": "I'm having a brief connectivity issue. Please repeat your answer or type it below.",
+            "error": str(e)
+        }
+
+
+# ---------- Interview Report ----------
 
 @app.post("/interview/report")
 async def interview_report(request: dict):
     try:
-        conversation = request.get("conversation", [])
+        conversation = request.get("conversation", "")
         if not conversation:
             return {"error": "Conversation history is required"}
 
         prompt = f"""
-        You are an expert Interview Coach.
-        Analyze the following interview conversation and provide a structured feedback report.
-        
-        Conversation:
-        {conversation}
-        
-        Provide feedback in JSON format with these fields:
-        - score (0-10)
-        - strengths (list of strings)
-        - improvements (list of strings)
-        - overall_feedback (string)
-        
-        Return ONLY valid JSON.
-        """
-        
+You are an expert Interview Coach.
+Analyze the following interview conversation and provide structured feedback.
+
+Conversation:
+{conversation}
+
+Return ONLY valid JSON (no markdown, no backticks) with exactly these fields:
+{{
+  "score": <integer 0-10>,
+  "strengths": [<string>, ...],
+  "improvements": [<string>, ...],
+  "overall_feedback": "<string>"
+}}
+"""
         api_key = os.getenv("GOOGLE_API_KEY")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
-        headers = { "Content-Type": "application/json" }
-        data = { "contents": [{ "parts": [{ "text": prompt }] }] }
-        
-        import time
-        import json
-        max_retries = 3
-        retry_delay = 2
 
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                result = response.json()
-                if "candidates" in result and result["candidates"]:
-                    ai_text = result["candidates"][0]["content"]["parts"][0]["text"]
-                    
-                    # Extract JSON
-                    json_match = re.search(r"\{.*\}", ai_text, re.DOTALL)
-                    if json_match:
-                        try:
-                            # Return parsed JSON object directly
-                            return {"report": json.loads(json_match.group(0))}
-                        except:
-                            pass
-                    
-                    # Fallback if strict JSON fails but text is there
-                    return {"report": {"overall_feedback": ai_text, "score": 0, "strengths": [], "improvements": []}}
-                    
-                raise Exception("No report generated")
+        try:
+            ai_text = call_gemini_with_fallback(prompt, api_key)
 
-            except requests.exceptions.HTTPError as e:
-                # Handle 429 Too Many Requests specifically with a Mock Fallback
-                if e.response.status_code == 429:
-                    print("429 Rate Limit hit. Returning mock report.")
-                    return {"report": {
-                        "score": 8,
-                        "strengths": [
-                            "Clear communication style",
-                            "Good connection of past experience to role",
-                            "Maintained professional demeanor"
-                        ],
-                        "improvements": [
-                            "Could provide more specific metrics for achievements",
-                            "Try to keep answers slightly more concise",
-                            "Use the STAR method more consistently"
-                        ],
-                        "overall_feedback": "You demonstrated strong potential for the role. Your answers were generally well-structured. (Note: This is a generated placeholder report because the AI Service is currently busy/rate-limited)."
-                    }}
-                
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                raise e
+            # Extract JSON from response
+            json_match = re.search(r"\{.*\}", ai_text, re.DOTALL)
+            if json_match:
+                try:
+                    return {"report": json.loads(json_match.group(0))}
+                except json.JSONDecodeError:
+                    pass
 
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                raise e
+            # Fallback: wrap raw text
+            return {"report": {
+                "score": 7,
+                "strengths": ["Completed the interview session"],
+                "improvements": ["Could not parse detailed feedback"],
+                "overall_feedback": ai_text
+            }}
+
+        except Exception as model_err:
+            print(f"Report generation failed, returning placeholder: {model_err}")
+            return {"report": {
+                "score": 7,
+                "strengths": [
+                    "Clear communication style",
+                    "Good connection of past experience to the role",
+                    "Maintained professional demeanor throughout"
+                ],
+                "improvements": [
+                    "Provide more specific metrics for achievements",
+                    "Keep answers slightly more concise",
+                    "Use the STAR method more consistently"
+                ],
+                "overall_feedback": (
+                    "You demonstrated strong potential for the role. Your answers were generally "
+                    "well-structured. (Note: AI service was temporarily unavailable; this is an "
+                    "auto-generated placeholder report.)"
+                )
+            }}
 
     except Exception as e:
         print(f"Error generating report: {str(e)}")
-        # If all else fails, return mock error report so UI doesn't break
-        if "429" in str(e):
-             return {"report": {
-                        "score": 7,
-                        "strengths": ["Resilience", "Patience"],
-                        "improvements": ["Retry later"],
-                        "overall_feedback": "AI Service is currently rate-limited. This is a placeholder report."
-                    }}
-        return {"error": f"Failed to generate report: {str(e)}"}
+        return {"report": {
+            "score": 6,
+            "strengths": ["Participated in the interview"],
+            "improvements": ["Please retry for a detailed AI analysis"],
+            "overall_feedback": f"Report generation encountered an error: {str(e)}"
+        }}
+
 
 # Optional: Run server directly
 if __name__ == "__main__":
-    app.run(debug=True)
-        
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

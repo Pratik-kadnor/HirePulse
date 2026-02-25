@@ -26,7 +26,13 @@ const app = express()
 //   allowedHeaders: ["Content-Type", "Authorization"] // Include necessary headers
 // }))
 
-app.use(cors());
+const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
+app.use(cors({
+  origin: allowedOrigin,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 // app.use(cors({
 //   origin: "https://dev-clash-hackathon.vercel.app", // frontend domain
 //   credentials: true,
