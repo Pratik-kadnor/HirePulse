@@ -46,8 +46,8 @@ A sleek and personalized career development dashboard built with *React*. Design
 ### Installation
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Tejas-Santosh-Nalawade/Dev-Clash.git
-   cd Finally-Placed
+   git clone https://github.com/Pratik-kadnor/HirePulse.git
+   cd HirePulse
    ```
 
 2. **Install Frontend Dependencies:**

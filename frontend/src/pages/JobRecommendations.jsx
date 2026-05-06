@@ -33,6 +33,26 @@ const JobRecommendations = () => {
     return matchSearch && matchCity;
   });
 
+  const getRelativeTime = (dateStr) => {
+    if (!dateStr) return null;
+    const now = new Date();
+    const posted = new Date(dateStr);
+    const diffMs = now - posted;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+    return `${Math.floor(diffDays / 365)}y ago`;
+  };
+
+  const isNew = (dateStr) => {
+    if (!dateStr) return false;
+    const diffDays = Math.floor((new Date() - new Date(dateStr)) / (1000 * 60 * 60 * 24));
+    return diffDays <= 7;
+  };
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center"
       style={{ background: "linear-gradient(135deg, #050818 0%, #0a0f2e 50%, #06081a 100%)" }}>
@@ -109,15 +129,14 @@ const JobRecommendations = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((job, i) => {
             const ctc = formatCTC(job.job_min_salary, job.job_max_salary);
-            const postedDate = job.job_posted_at_datetime_utc
-              ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-              : null;
+            const relTime = getRelativeTime(job.job_posted_at_datetime_utc);
+            const jobIsNew = isNew(job.job_posted_at_datetime_utc);
 
             return (
               <div key={i} className="flex flex-col rounded-2xl overflow-hidden transition-all duration-300 group"
-                style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.05), rgba(6,182,212,0.03))", border: "1px solid rgba(139,92,246,0.15)", backdropFilter: "blur(12px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}
-                onMouseEnter={e => { e.currentTarget.style.border = "1px solid rgba(139,92,246,0.45)"; e.currentTarget.style.boxShadow = "0 8px 40px rgba(139,92,246,0.2)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.border = "1px solid rgba(139,92,246,0.15)"; e.currentTarget.style.boxShadow = "0 4px 24px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; }}>
+                style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.05), rgba(6,182,212,0.03))", border: jobIsNew ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(139,92,246,0.15)", backdropFilter: "blur(12px)", boxShadow: jobIsNew ? "0 4px 28px rgba(139,92,246,0.25)" : "0 4px 24px rgba(0,0,0,0.4)" }}
+                onMouseEnter={e => { e.currentTarget.style.border = "1px solid rgba(139,92,246,0.55)"; e.currentTarget.style.boxShadow = "0 8px 40px rgba(139,92,246,0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.border = jobIsNew ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(139,92,246,0.15)"; e.currentTarget.style.boxShadow = jobIsNew ? "0 4px 28px rgba(139,92,246,0.25)" : "0 4px 24px rgba(0,0,0,0.4)"; e.currentTarget.style.transform = "translateY(0)"; }}>
 
                 {/* Card Header */}
                 <div className="p-5 flex items-start gap-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
@@ -130,8 +149,16 @@ const JobRecommendations = () => {
                       <div className="font-bold text-xl" style={{ color: "#a78bfa" }}>{job.employer_name.charAt(0)}</div>
                     )}
                   </div>
-                  <div className="min-w-0">
-                    <h2 className="text-base font-bold text-white leading-tight line-clamp-2">{job.job_title}</h2>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="text-base font-bold text-white leading-tight line-clamp-2">{job.job_title}</h2>
+                      {jobIsNew && (
+                        <span className="flex-shrink-0 text-[10px] font-extrabold px-2 py-0.5 rounded-full tracking-widest"
+                          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)", color: "white", boxShadow: "0 0 10px rgba(139,92,246,0.6)" }}>
+                          NEW
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-semibold mt-0.5 flex items-center gap-1" style={{ color: "#8b5cf6" }}>
                       <Building2 className="w-3.5 h-3.5" />{job.employer_name}
                     </p>
@@ -156,7 +183,11 @@ const JobRecommendations = () => {
                     </p>
                   )}
                   {job.job_description && <p className="text-xs line-clamp-3 leading-relaxed text-slate-600">{job.job_description}</p>}
-                  {postedDate && <p className="text-xs text-slate-700">Posted: {postedDate}</p>}
+                  {relTime && (
+                    <p className="text-xs font-medium" style={{ color: jobIsNew ? "#a78bfa" : "#475569" }}>
+                      🕐 Posted {relTime}
+                    </p>
+                  )}
                 </div>
 
                 {/* Card Footer */}
